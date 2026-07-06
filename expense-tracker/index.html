@@ -1,0 +1,835 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ExpenseFlow — Income & Expense Tracker</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            display: ['Space Grotesk', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace'],
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Space Grotesk', sans-serif; background: #08080a; color: #e5e5e5; min-height: 100vh; overflow-x: hidden; }
+    ::-webkit-scrollbar { width: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #2a2a2e; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #3a3a3e; }
+
+    .bg-glow {
+      position: fixed; top: -250px; right: -150px; width: 600px; height: 600px;
+      background: radial-gradient(circle, rgba(16,185,129,0.05) 0%, transparent 65%);
+      pointer-events: none; z-index: 0;
+    }
+    .bg-glow-2 {
+      position: fixed; bottom: -250px; left: -150px; width: 550px; height: 550px;
+      background: radial-gradient(circle, rgba(245,158,11,0.04) 0%, transparent 65%);
+      pointer-events: none; z-index: 0;
+    }
+    .noise-overlay {
+      position: fixed; inset: 0; z-index: 0; pointer-events: none; opacity: 0.025;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    }
+
+    .modal-overlay { animation: fadeIn 0.2s ease-out; }
+    .modal-content { animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1); }
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    @keyframes slideUp { from { opacity: 0; transform: translateY(16px) scale(0.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
+
+    .toast-enter { animation: toastIn 0.4s cubic-bezier(0.16, 1, 0.3, 1); }
+    .toast-exit { animation: toastOut 0.3s ease-in forwards; }
+    @keyframes toastIn { from { opacity: 0; transform: translateX(100%) scale(0.9); } to { opacity: 1; transform: translateX(0) scale(1); } }
+    @keyframes toastOut { from { opacity: 1; transform: translateX(0); } to { opacity: 0; transform: translateX(100%); } }
+
+    .expense-item { animation: itemIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) both; }
+    @keyframes itemIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+    .stat-card { transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1); }
+    .stat-card:hover { transform: translateY(-2px); }
+
+    input:focus, select:focus, textarea:focus { outline: none; box-shadow: 0 0 0 2px rgba(16,185,129,0.25); }
+    .btn-press:active { transform: scale(0.97); }
+    .pulse-dot { animation: pulse 2s ease-in-out infinite; }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+    .shake { animation: shake 0.4s ease-in-out; }
+    @keyframes shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-4px); } 75% { transform: translateX(4px); } }
+    .cat-bar { transition: width 0.8s cubic-bezier(0.16, 1, 0.3, 1); }
+
+    .balance-glow-positive { box-shadow: 0 0 60px -10px rgba(16,185,129,0.15), inset 0 1px 0 rgba(255,255,255,0.04); }
+    .balance-glow-negative { box-shadow: 0 0 60px -10px rgba(244,63,94,0.12), inset 0 1px 0 rgba(255,255,255,0.04); }
+
+    .type-toggle-expense { background: rgba(244,63,94,0.12); border-color: rgba(244,63,94,0.4); color: #fb7185; }
+    .type-toggle-earning { background: rgba(16,185,129,0.12); border-color: rgba(16,185,129,0.4); color: #34d399; }
+    .type-toggle-neutral { background: rgba(255,255,255,0.03); border-color: rgba(255,255,255,0.06); color: rgba(255,255,255,0.3); }
+
+    @keyframes balanceCount { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+    .balance-value { animation: balanceCount 0.5s cubic-bezier(0.16, 1, 0.3, 1); }
+  </style>
+</head>
+<body>
+  <div class="bg-glow"></div>
+  <div class="bg-glow-2"></div>
+  <div class="noise-overlay"></div>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect, useCallback, useRef, useMemo } = React;
+
+    /* ─── Categories for both types ─── */
+    const EXPENSE_CATEGORIES = [
+      { id: 'food', label: 'Food & Drinks', icon: 'fa-utensils', color: '#f59e0b' },
+      { id: 'transport', label: 'Transport', icon: 'fa-car', color: '#3b82f6' },
+      { id: 'shopping', label: 'Shopping', icon: 'fa-bag-shopping', color: '#ec4899' },
+      { id: 'bills', label: 'Bills & Utilities', icon: 'fa-file-invoice', color: '#a855f7' },
+      { id: 'entertainment', label: 'Entertainment', icon: 'fa-gamepad', color: '#f43f5e' },
+      { id: 'health', label: 'Health', icon: 'fa-heart-pulse', color: '#10b981' },
+      { id: 'education', label: 'Education', icon: 'fa-graduation-cap', color: '#06b6d4' },
+      { id: 'other_expense', label: 'Other', icon: 'fa-ellipsis', color: '#6b7280' },
+    ];
+
+    const EARNING_CATEGORIES = [
+      { id: 'salary', label: 'Salary', icon: 'fa-briefcase', color: '#10b981' },
+      { id: 'freelance', label: 'Freelance', icon: 'fa-laptop-code', color: '#06b6d4' },
+      { id: 'investment', label: 'Investment', icon: 'fa-chart-line', color: '#f59e0b' },
+      { id: 'gift', label: 'Gift', icon: 'fa-gift', color: '#ec4899' },
+      { id: 'refund', label: 'Refund', icon: 'fa-rotate-left', color: '#a855f7' },
+      { id: 'side_hustle', label: 'Side Hustle', icon: 'fa-bolt', color: '#f97316' },
+      { id: 'other_earning', label: 'Other', icon: 'fa-ellipsis', color: '#6b7280' },
+    ];
+
+    const STORAGE_KEY = 'expenseflow_v2';
+
+    const generateId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+    const loadExpenses = () => { try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || []; } catch { return []; } };
+    const saveExpenses = (d) => localStorage.setItem(STORAGE_KEY, JSON.stringify(d));
+    const formatCurrency = (a) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(a);
+    const formatDate = (d) => new Date(d + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    const getToday = () => new Date().toISOString().split('T')[0];
+    const getMonthStart = () => { const d = new Date(); d.setDate(1); return d.toISOString().split('T')[0]; };
+
+    const getCat = (id, type) => {
+      const list = type === 'earning' ? EARNING_CATEGORIES : EXPENSE_CATEGORIES;
+      return list.find(c => c.id === id) || list[list.length - 1];
+    };
+
+    /* ─── Toast ─── */
+    function ToastContainer({ toasts }) {
+      return (
+        <div className="fixed top-4 right-4 z-[100] flex flex-col gap-2 pointer-events-none" style={{ maxWidth: '360px' }}>
+          {toasts.map(t => (
+            <div key={t.id} className={`pointer-events-auto flex items-center gap-3 px-4 py-3 rounded-xl shadow-2xl border backdrop-blur-xl ${t.exiting ? 'toast-exit' : 'toast-enter'}`}
+              style={{
+                background: t.type === 'success' ? 'rgba(16,185,129,0.14)' : t.type === 'error' ? 'rgba(244,63,94,0.14)' : 'rgba(245,158,11,0.14)',
+                borderColor: t.type === 'success' ? 'rgba(16,185,129,0.25)' : t.type === 'error' ? 'rgba(244,63,94,0.25)' : 'rgba(245,158,11,0.25)',
+              }}>
+              <i className={`fa-solid ${t.type === 'success' ? 'fa-check-circle text-emerald-400' : t.type === 'error' ? 'fa-circle-xmark text-rose-400' : 'fa-exclamation-circle text-amber-400'}`}></i>
+              <span className="text-sm text-white/90">{t.message}</span>
+            </div>
+          ))}
+        </div>
+      );
+    }
+
+    /* ─── Balance Card (Hero) ─── */
+    function BalanceCard({ balance, earnings, expenses, monthEarnings, monthExpenses }) {
+      const isPositive = balance >= 0;
+      const monthBalance = monthEarnings - monthExpenses;
+      return (
+        <div className={`rounded-2xl border p-6 relative overflow-hidden ${isPositive ? 'balance-glow-positive' : 'balance-glow-negative'}`}
+          style={{ background: 'linear-gradient(135deg, #141416 0%, #0e0e10 100%)', borderColor: isPositive ? 'rgba(16,185,129,0.12)' : 'rgba(244,63,94,0.12)' }}>
+          {/* Decorative circles */}
+          <div className="absolute -top-10 -right-10 w-40 h-40 rounded-full opacity-[0.04]"
+            style={{ background: isPositive ? '#10b981' : '#f43f5e' }}></div>
+          <div className="absolute -bottom-8 -left-8 w-32 h-32 rounded-full opacity-[0.03]"
+            style={{ background: isPositive ? '#10b981' : '#f43f5e' }}></div>
+
+          <p className="text-xs font-medium text-white/35 uppercase tracking-widest mb-2">Current Balance</p>
+          <p className={`text-4xl sm:text-5xl font-bold font-mono tracking-tight balance-value ${isPositive ? 'text-emerald-400' : 'text-rose-400'}`}>
+            {isPositive ? '+' : ''}{formatCurrency(balance)}
+          </p>
+
+          <div className="grid grid-cols-3 gap-4 mt-6">
+            <div>
+              <div className="flex items-center gap-1.5 mb-1">
+                <div className="w-1.5 h-1.5 rounded-full bg-emerald-400"></div>
+                <span className="text-[10px] text-white/30 uppercase tracking-wider">Income</span>
+              </div>
+              <p className="text-sm font-mono font-semibold text-emerald-400/90">{formatCurrency(earnings)}</p>
+            </div>
+            <div>
+              <div className="flex items-center gap-1.5 mb-1">
+                <div className="w-1.5 h-1.5 rounded-full bg-rose-400"></div>
+                <span className="text-[10px] text-white/30 uppercase tracking-wider">Expenses</span>
+              </div>
+              <p className="text-sm font-mono font-semibold text-rose-400/90">{formatCurrency(expenses)}</p>
+            </div>
+            <div>
+              <div className="flex items-center gap-1.5 mb-1">
+                <div className="w-1.5 h-1.5 rounded-full bg-amber-400"></div>
+                <span className="text-[10px] text-white/30 uppercase tracking-wider">Month Net</span>
+              </div>
+              <p className={`text-sm font-mono font-semibold ${monthBalance >= 0 ? 'text-emerald-400/90' : 'text-rose-400/90'}`}>
+                {monthBalance >= 0 ? '+' : ''}{formatCurrency(monthBalance)}
+              </p>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    /* ─── Stat Card ─── */
+    function StatCard({ icon, label, value, sub, accentColor }) {
+      return (
+        <div className="stat-card relative overflow-hidden rounded-2xl border border-white/[0.05] p-4"
+          style={{ background: 'linear-gradient(135deg, #141416 0%, #111113 100%)' }}>
+          <div className="flex items-start justify-between">
+            <div>
+              <p className="text-[10px] font-medium text-white/30 uppercase tracking-wider mb-1">{label}</p>
+              <p className="text-lg font-bold text-white font-mono tracking-tight">{value}</p>
+              {sub && <p className="text-[10px] text-white/20 mt-0.5">{sub}</p>}
+            </div>
+            <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: accentColor + '12' }}>
+              <i className={`fa-solid ${icon} text-xs`} style={{ color: accentColor }}></i>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    /* ─── Category Breakdown ─── */
+    function CategoryBreakdown({ expenses, earnings, activeTab, setActiveTab }) {
+      const expenseTotals = useMemo(() => {
+        const m = {}; expenses.forEach(e => { m[e.category] = (m[e.category] || 0) + e.amount; });
+        return Object.entries(m).sort((a, b) => b[1] - a[1]);
+      }, [expenses]);
+      const earningTotals = useMemo(() => {
+        const m = {}; earnings.forEach(e => { m[e.category] = (m[e.category] || 0) + e.amount; });
+        return Object.entries(m).sort((a, b) => b[1] - a[1]);
+      }, [earnings]);
+
+      const data = activeTab === 'expense' ? expenseTotals : earningTotals;
+      const total = data.reduce((s, [, v]) => s + v, 0);
+      const getCatItem = (id) => activeTab === 'expense' ? getCat(id, 'expense') : getCat(id, 'earning');
+
+      return (
+        <div className="rounded-2xl border border-white/[0.05] p-5" style={{ background: 'linear-gradient(135deg, #141416 0%, #111113 100%)' }}>
+          <div className="flex items-center gap-1 mb-4 p-0.5 rounded-lg" style={{ background: 'rgba(255,255,255,0.03)' }}>
+            <button onClick={() => setActiveTab('expense')}
+              className={`flex-1 py-1.5 rounded-md text-[11px] font-semibold uppercase tracking-wider transition-all btn-press ${activeTab === 'expense' ? 'bg-rose-500/15 text-rose-400' : 'text-white/25 hover:text-white/40'}`}>
+              Expenses
+            </button>
+            <button onClick={() => setActiveTab('earning')}
+              className={`flex-1 py-1.5 rounded-md text-[11px] font-semibold uppercase tracking-wider transition-all btn-press ${activeTab === 'earning' ? 'bg-emerald-500/15 text-emerald-400' : 'text-white/25 hover:text-white/40'}`}>
+              Income
+            </button>
+          </div>
+          {data.length === 0 ? (
+            <p className="text-xs text-white/15 text-center py-8">No {activeTab} data yet</p>
+          ) : (
+            <div className="space-y-3">
+              {data.map(([catId, amount]) => {
+                const cat = getCatItem(catId);
+                const pct = total > 0 ? (amount / total * 100) : 0;
+                return (
+                  <div key={catId}>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <div className="flex items-center gap-2">
+                        <div className="w-6 h-6 rounded-lg flex items-center justify-center" style={{ background: cat.color + '15' }}>
+                          <i className={`fa-solid ${cat.icon} text-[9px]`} style={{ color: cat.color }}></i>
+                        </div>
+                        <span className="text-xs text-white/60">{cat.label}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] text-white/20 font-mono">{pct.toFixed(0)}%</span>
+                        <span className="text-xs font-mono font-medium text-white/80">{formatCurrency(amount)}</span>
+                      </div>
+                    </div>
+                    <div className="h-1 rounded-full overflow-hidden" style={{ background: '#1e1e20' }}>
+                      <div className="cat-bar h-full rounded-full" style={{ width: `${pct}%`, background: cat.color }}></div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    /* ─── Modal ─── */
+    function ExpenseModal({ entry, onSave, onClose }) {
+      const isEdit = !!entry;
+      const [form, setForm] = useState({
+        type: entry?.type || 'expense',
+        amount: entry?.amount?.toString() || '',
+        category: entry?.category || 'food',
+        description: entry?.description || '',
+        date: entry?.date || getToday(),
+      });
+      const [errors, setErrors] = useState({});
+
+      const cats = form.type === 'earning' ? EARNING_CATEGORIES : EXPENSE_CATEGORIES;
+      const isExpense = form.type === 'expense';
+
+      /* Reset category when type changes */
+      const updateType = (type) => {
+        setForm(f => ({
+          ...f,
+          type,
+          category: type === 'earning' ? 'salary' : 'food',
+        }));
+        setErrors({});
+      };
+
+      const validate = () => {
+        const e = {};
+        if (!form.amount || isNaN(parseFloat(form.amount)) || parseFloat(form.amount) <= 0) e.amount = 'Enter a valid amount';
+        if (!form.description.trim()) e.description = 'Add a description';
+        if (!form.date) e.date = 'Pick a date';
+        setErrors(e);
+        return Object.keys(e).length === 0;
+      };
+
+      const handleSubmit = (ev) => {
+        ev.preventDefault();
+        if (!validate()) return;
+        onSave({
+          id: entry?.id || generateId(),
+          type: form.type,
+          amount: parseFloat(parseFloat(form.amount).toFixed(2)),
+          category: form.category,
+          description: form.description.trim(),
+          date: form.date,
+          createdAt: entry?.createdAt || new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        });
+      };
+
+      const updateField = (field, value) => {
+        setForm(f => ({ ...f, [field]: value }));
+        if (errors[field]) setErrors(e => ({ ...e, [field]: undefined }));
+      };
+
+      return (
+        <div className="modal-overlay fixed inset-0 z-50 flex items-center justify-center p-4" onClick={onClose}>
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm"></div>
+          <div className="modal-content relative w-full max-w-md rounded-2xl border border-white/[0.07] p-6 shadow-2xl"
+            style={{ background: '#161618' }} onClick={e => e.stopPropagation()}>
+
+            <div className="flex items-center justify-between mb-5">
+              <div>
+                <h2 className="text-lg font-bold text-white">{isEdit ? 'Edit Entry' : 'New Entry'}</h2>
+                <p className="text-[11px] text-white/25 mt-0.5">{isEdit ? 'Update the details below' : 'Record income or expense'}</p>
+              </div>
+              <button onClick={onClose} className="w-8 h-8 rounded-lg flex items-center justify-center text-white/25 hover:text-white/50 hover:bg-white/5 transition-all btn-press">
+                <i className="fa-solid fa-xmark text-sm"></i>
+              </button>
+            </div>
+
+            {/* Type Toggle */}
+            <div className="flex gap-2 mb-5">
+              <button type="button" onClick={() => updateType('expense')}
+                className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl border text-sm font-semibold transition-all btn-press ${form.type === 'expense' ? 'type-toggle-expense' : 'type-toggle-neutral'}`}>
+                <i className="fa-solid fa-arrow-down text-xs"></i> Expense
+              </button>
+              <button type="button" onClick={() => updateType('earning')}
+                className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl border text-sm font-semibold transition-all btn-press ${form.type === 'earning' ? 'type-toggle-earning' : 'type-toggle-neutral'}`}>
+                <i className="fa-solid fa-arrow-up text-xs"></i> Earning
+              </button>
+            </div>
+
+            <form onSubmit={handleSubmit} className="space-y-4">
+              {/* Amount */}
+              <div>
+                <label className="block text-[10px] font-medium text-white/30 uppercase tracking-wider mb-2">Amount</label>
+                <div className="relative">
+                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-white/20 font-mono text-sm">$</span>
+                  <input type="number" step="0.01" min="0" placeholder="0.00" value={form.amount}
+                    onChange={e => updateField('amount', e.target.value)}
+                    className={`w-full pl-8 pr-4 py-3 rounded-xl border text-white font-mono text-lg placeholder:text-white/10 ${errors.amount ? 'border-rose-500/50' : 'border-white/[0.06]'} bg-white/[0.03] focus:bg-white/[0.05] transition-all`}
+                  />
+                </div>
+                {errors.amount && <p className="text-rose-400 text-xs mt-1">{errors.amount}</p>}
+              </div>
+
+              {/* Category */}
+              <div>
+                <label className="block text-[10px] font-medium text-white/30 uppercase tracking-wider mb-2">Category</label>
+                <div className="grid grid-cols-4 gap-1.5">
+                  {cats.map(cat => (
+                    <button key={cat.id} type="button" onClick={() => updateField('category', cat.id)}
+                      className={`flex flex-col items-center gap-1 py-2.5 px-1 rounded-xl border transition-all btn-press ${form.category === cat.id ? 'border-white/15 bg-white/[0.06]' : 'border-transparent bg-white/[0.02] hover:bg-white/[0.04]'}`}>
+                      <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: cat.color + (form.category === cat.id ? '22' : '0d') }}>
+                        <i className={`fa-solid ${cat.icon} text-[10px]`} style={{ color: form.category === cat.id ? cat.color : cat.color + '70' }}></i>
+                      </div>
+                      <span className="text-[9px] text-white/30 leading-tight text-center">{cat.label.split(' ')[0]}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Description */}
+              <div>
+                <label className="block text-[10px] font-medium text-white/30 uppercase tracking-wider mb-2">Description</label>
+                <input type="text" placeholder="What was this for?" value={form.description}
+                  onChange={e => updateField('description', e.target.value)}
+                  className={`w-full px-4 py-3 rounded-xl border ${errors.description ? 'border-rose-500/50' : 'border-white/[0.06]'} bg-white/[0.03] text-white text-sm placeholder:text-white/10 focus:bg-white/[0.05] transition-all`}
+                />
+                {errors.description && <p className="text-rose-400 text-xs mt-1">{errors.description}</p>}
+              </div>
+
+              {/* Date */}
+              <div>
+                <label className="block text-[10px] font-medium text-white/30 uppercase tracking-wider mb-2">Date</label>
+                <input type="date" value={form.date} onChange={e => updateField('date', e.target.value)}
+                  className={`w-full px-4 py-3 rounded-xl border ${errors.date ? 'border-rose-500/50' : 'border-white/[0.06]'} bg-white/[0.03] text-white text-sm focus:bg-white/[0.05] transition-all [color-scheme:dark]`}
+                />
+                {errors.date && <p className="text-rose-400 text-xs mt-1">{errors.date}</p>}
+              </div>
+
+              {/* Actions */}
+              <div className="flex gap-3 pt-1">
+                <button type="button" onClick={onClose}
+                  className="flex-1 py-3 rounded-xl border border-white/[0.06] text-white/40 text-sm font-medium hover:bg-white/[0.03] hover:text-white/60 transition-all btn-press">
+                  Cancel
+                </button>
+                <button type="submit"
+                  className="flex-1 py-3 rounded-xl text-sm font-semibold text-black transition-all btn-press hover:brightness-110"
+                  style={{ background: isExpense ? 'linear-gradient(135deg, #fb7185, #f43f5e)' : 'linear-gradient(135deg, #34d399, #10b981)' }}>
+                  {isEdit ? 'Save Changes' : isExpense ? 'Add Expense' : 'Add Earning'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      );
+    }
+
+    /* ─── Delete Confirm ─── */
+    function DeleteConfirm({ entry, onConfirm, onCancel }) {
+      const [shaking, setShaking] = useState(false);
+      const go = () => { setShaking(true); setTimeout(() => onConfirm(), 250); };
+      const isEarning = entry.type === 'earning';
+      return (
+        <div className="modal-overlay fixed inset-0 z-50 flex items-center justify-center p-4" onClick={onCancel}>
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm"></div>
+          <div className={`modal-content relative w-full max-w-sm rounded-2xl border border-white/[0.07] p-6 shadow-2xl ${shaking ? 'shake' : ''}`}
+            style={{ background: '#161618' }} onClick={e => e.stopPropagation()}>
+            <div className="w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-4" style={{ background: 'rgba(244,63,94,0.1)' }}>
+              <i className="fa-solid fa-trash-can text-rose-400"></i>
+            </div>
+            <h3 className="text-lg font-bold text-white text-center mb-1">Delete {isEarning ? 'Earning' : 'Expense'}</h3>
+            <p className="text-sm text-white/35 text-center mb-1">Are you sure you want to delete</p>
+            <p className="text-sm text-white/60 text-center font-medium mb-6">"{entry.description}" — {isEarning ? '+' : '-'}{formatCurrency(entry.amount)}?</p>
+            <div className="flex gap-3">
+              <button onClick={onCancel} className="flex-1 py-2.5 rounded-xl border border-white/[0.06] text-white/40 text-sm font-medium hover:bg-white/[0.03] transition-all btn-press">Keep it</button>
+              <button onClick={go} className="flex-1 py-2.5 rounded-xl bg-rose-500/12 border border-rose-500/25 text-rose-400 text-sm font-semibold hover:bg-rose-500/20 transition-all btn-press">Delete</button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    /* ─── Entry Row ─── */
+    function EntryRow({ entry, index, onEdit, onDelete }) {
+      const isEarning = entry.type === 'earning';
+      const cat = getCat(entry.category, entry.type);
+      return (
+        <div className="expense-item group flex items-center gap-3 sm:gap-4 p-3 sm:p-4 rounded-xl border border-transparent hover:border-white/[0.05] hover:bg-white/[0.015] transition-all cursor-default"
+          style={{ animationDelay: `${index * 35}ms` }}>
+          {/* Category Icon */}
+          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center shrink-0" style={{ background: cat.color + '10' }}>
+            <i className={`fa-solid ${cat.icon} text-xs sm:text-sm`} style={{ color: cat.color }}></i>
+          </div>
+
+          {/* Info */}
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2">
+              <p className="text-sm font-medium text-white/80 truncate">{entry.description}</p>
+              <span className={`shrink-0 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${isEarning ? 'bg-emerald-500/10 text-emerald-400/70' : 'bg-rose-500/10 text-rose-400/70'}`}>
+                {isEarning ? 'IN' : 'OUT'}
+              </span>
+            </div>
+            <div className="flex items-center gap-1.5 mt-0.5">
+              <span className="text-[10px] text-white/20">{cat.label}</span>
+              <span className="w-0.5 h-0.5 rounded-full bg-white/10"></span>
+              <span className="text-[10px] text-white/20">{formatDate(entry.date)}</span>
+            </div>
+          </div>
+
+          {/* Amount */}
+          <div className="text-right shrink-0">
+            <p className={`text-sm font-mono font-semibold ${isEarning ? 'text-emerald-400' : 'text-rose-400'}`}>
+              {isEarning ? '+' : '-'}{formatCurrency(entry.amount)}
+            </p>
+          </div>
+
+          {/* Actions */}
+          <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+            <button onClick={() => onEdit(entry)} className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg flex items-center justify-center text-white/20 hover:text-amber-400 hover:bg-amber-400/10 transition-all btn-press" title="Edit">
+              <i className="fa-solid fa-pen-to-square text-[10px] sm:text-xs"></i>
+            </button>
+            <button onClick={() => onDelete(entry)} className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg flex items-center justify-center text-white/20 hover:text-rose-400 hover:bg-rose-400/10 transition-all btn-press" title="Delete">
+              <i className="fa-solid fa-trash-can text-[10px] sm:text-xs"></i>
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    /* ─── Empty State ─── */
+    function EmptyState({ onAdd }) {
+      return (
+        <div className="flex flex-col items-center justify-center py-16">
+          <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-4" style={{ background: 'linear-gradient(135deg, rgba(16,185,129,0.08), rgba(16,185,129,0.02))' }}>
+            <i className="fa-solid fa-receipt text-2xl text-emerald-500/30"></i>
+          </div>
+          <h3 className="text-base font-semibold text-white/40 mb-1">No entries yet</h3>
+          <p className="text-xs text-white/20 mb-5">Start tracking your income and expenses</p>
+          <button onClick={onAdd} className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold text-black btn-press hover:brightness-110 transition-all"
+            style={{ background: 'linear-gradient(135deg, #34d399, #10b981)' }}>
+            <i className="fa-solid fa-plus text-xs"></i> Add First Entry
+          </button>
+        </div>
+      );
+    }
+
+    /* ─── App ─── */
+    function App() {
+      const [entries, setEntries] = useState(loadExpenses);
+      const [modalOpen, setModalOpen] = useState(false);
+      const [editingEntry, setEditingEntry] = useState(null);
+      const [deleteTarget, setDeleteTarget] = useState(null);
+      const [toasts, setToasts] = useState([]);
+      const [searchQuery, setSearchQuery] = useState('');
+      const [filterCategory, setFilterCategory] = useState('all');
+      const [filterType, setFilterType] = useState('all');
+      const [sortBy, setSortBy] = useState('date-desc');
+      const [catTab, setCatTab] = useState('expense');
+      const toastRef = useRef(0);
+
+      useEffect(() => { saveExpenses(entries); }, [entries]);
+
+      const addToast = useCallback((message, type = 'success') => {
+        const id = ++toastRef.current;
+        setToasts(p => [...p, { id, message, type, exiting: false }]);
+        setTimeout(() => {
+          setToasts(p => p.map(t => t.id === id ? { ...t, exiting: true } : t));
+          setTimeout(() => setToasts(p => p.filter(t => t.id !== id)), 300);
+        }, 2800);
+      }, []);
+
+      const handleSave = useCallback((entry) => {
+        const exists = entries.find(e => e.id === entry.id);
+        if (exists) {
+          setEntries(p => p.map(e => e.id === entry.id ? entry : e));
+          addToast(`${entry.type === 'earning' ? 'Earning' : 'Expense'} updated`);
+        } else {
+          setEntries(p => [entry, ...p]);
+          addToast(`${entry.type === 'earning' ? 'Earning' : 'Expense'} added`);
+        }
+        setModalOpen(false); setEditingEntry(null);
+      }, [entries, addToast]);
+
+      const handleDelete = useCallback((id) => {
+        setEntries(p => p.filter(e => e.id !== id));
+        setDeleteTarget(null);
+        addToast('Entry deleted', 'warning');
+      }, [addToast]);
+
+      const openAdd = () => { setEditingEntry(null); setModalOpen(true); };
+      const openEdit = (e) => { setEditingEntry(e); setModalOpen(true); };
+      const closeModal = () => { setModalOpen(false); setEditingEntry(null); };
+
+      /* All categories merged for filter dropdown */
+      const allCats = useMemo(() => [
+        ...EXPENSE_CATEGORIES.map(c => ({ ...c, type: 'expense' })),
+        ...EARNING_CATEGORIES.map(c => ({ ...c, type: 'earning' })),
+      ], []);
+
+      /* Filtered entries */
+      const filtered = useMemo(() => {
+        let r = [...entries];
+        if (filterType !== 'all') r = r.filter(e => e.type === filterType);
+        if (filterCategory !== 'all') r = r.filter(e => e.category === filterCategory);
+        if (searchQuery.trim()) {
+          const q = searchQuery.toLowerCase();
+          r = r.filter(e => e.description.toLowerCase().includes(q) || getCat(e.category, e.type).label.toLowerCase().includes(q));
+        }
+        switch (sortBy) {
+          case 'date-desc': r.sort((a, b) => b.date.localeCompare(a.date) || b.createdAt.localeCompare(a.createdAt)); break;
+          case 'date-asc': r.sort((a, b) => a.date.localeCompare(b.date) || a.createdAt.localeCompare(b.createdAt)); break;
+          case 'amount-desc': r.sort((a, b) => b.amount - a.amount); break;
+          case 'amount-asc': r.sort((a, b) => a.amount - b.amount); break;
+        }
+        return r;
+      }, [entries, searchQuery, filterCategory, filterType, sortBy]);
+
+      /* Grouped by date */
+      const grouped = useMemo(() => {
+        const g = {};
+        filtered.forEach(e => { if (!g[e.date]) g[e.date] = []; g[e.date].push(e); });
+        return Object.entries(g).sort((a, b) => b[0].localeCompare(a[0]));
+      }, [filtered]);
+
+      /* Calculations */
+      const expenses = useMemo(() => entries.filter(e => e.type === 'expense'), [entries]);
+      const earnings = useMemo(() => entries.filter(e => e.type === 'earning'), [entries]);
+      const totalExpenses = useMemo(() => expenses.reduce((s, e) => s + e.amount, 0), [expenses]);
+      const totalEarnings = useMemo(() => earnings.reduce((s, e) => s + e.amount, 0), [earnings]);
+      const balance = totalEarnings - totalExpenses;
+
+      const todayAll = useMemo(() => entries.filter(e => e.date === getToday()), [entries]);
+      const todayNet = useMemo(() => todayAll.reduce((s, e) => s + (e.type === 'earning' ? e.amount : -e.amount), 0), [todayAll]);
+
+      const monthAll = useMemo(() => entries.filter(e => e.date >= getMonthStart()), [entries]);
+      const monthEarnings = useMemo(() => monthAll.filter(e => e.type === 'earning').reduce((s, e) => s + e.amount, 0), [monthAll]);
+      const monthExpenses = useMemo(() => monthAll.filter(e => e.type === 'expense').reduce((s, e) => s + e.amount, 0), [monthAll]);
+
+      const avgDaily = useMemo(() => {
+        if (entries.length === 0) return 0;
+        const dates = [...new Set(entries.map(e => e.date))];
+        return balance / dates.length;
+      }, [entries, balance]);
+
+      return (
+        <div className="relative z-10 min-h-screen flex flex-col">
+          <ToastContainer toasts={toasts} />
+
+          {/* Header */}
+          <header className="sticky top-0 z-40 border-b border-white/[0.03]" style={{ background: 'rgba(8,8,10,0.82)', backdropFilter: 'blur(20px)' }}>
+            <div className="max-w-6xl mx-auto px-4 sm:px-6 py-3.5 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: 'linear-gradient(135deg, #34d399, #059669)' }}>
+                  <i className="fa-solid fa-wallet text-xs text-black"></i>
+                </div>
+                <div>
+                  <h1 className="text-sm font-bold text-white tracking-tight">ExpenseFlow</h1>
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-1 h-1 rounded-full bg-emerald-400 pulse-dot"></div>
+                    <span className="text-[9px] text-white/20 uppercase tracking-widest">Tracking</span>
+                  </div>
+                </div>
+              </div>
+              <button onClick={openAdd}
+                className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold text-black btn-press hover:brightness-110 transition-all shadow-lg shadow-emerald-500/15"
+                style={{ background: 'linear-gradient(135deg, #34d399, #10b981)' }}>
+                <i className="fa-solid fa-plus text-[10px]"></i>
+                <span className="hidden sm:inline">Add Entry</span>
+              </button>
+            </div>
+          </header>
+
+          <main className="flex-1 max-w-6xl mx-auto px-4 sm:px-6 py-5 w-full">
+            {/* Balance Hero */}
+            <div className="mb-5">
+              <BalanceCard balance={balance} earnings={totalEarnings} expenses={totalExpenses} monthEarnings={monthEarnings} monthExpenses={monthExpenses} />
+            </div>
+
+            {/* Stat Cards */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
+              <StatCard icon="fa-arrow-up" label="Total Income" value={formatCurrency(totalEarnings)} sub={`${earnings.length} entries`} accentColor="#10b981" />
+              <StatCard icon="fa-arrow-down" label="Total Expenses" value={formatCurrency(totalExpenses)} sub={`${expenses.length} entries`} accentColor="#f43f5e" />
+              <StatCard icon="fa-calendar-day" label="Today's Net" value={`${todayNet >= 0 ? '+' : ''}${formatCurrency(todayNet)}`} sub={`${todayAll.length} entries`} accentColor="#f59e0b" />
+              <StatCard icon="fa-chart-line" label="Avg Daily" value={`${avgDaily >= 0 ? '+' : ''}${formatCurrency(avgDaily)}`} sub="Net per active day" accentColor="#06b6d4" />
+            </div>
+
+            <div className="grid lg:grid-cols-[1fr_300px] gap-5">
+              {/* Left: List */}
+              <div>
+                {/* Filters */}
+                <div className="flex flex-col sm:flex-row gap-2 mb-3">
+                  <div className="relative flex-1">
+                    <i className="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-white/15 text-[10px]"></i>
+                    <input type="text" placeholder="Search..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
+                      className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-white/[0.05] bg-white/[0.02] text-sm text-white placeholder:text-white/10 focus:bg-white/[0.04] transition-all" />
+                  </div>
+                  {/* Type filter */}
+                  <select value={filterType} onChange={e => setFilterType(e.target.value)}
+                    className="px-3 py-2.5 rounded-xl border border-white/[0.05] bg-white/[0.02] text-xs text-white/60 focus:bg-white/[0.04] transition-all appearance-none cursor-pointer min-w-[110px]"
+                    style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'10\' height=\'10\' fill=\'%23666\' viewBox=\'0 0 16 16\'%3E%3Cpath d=\'M8 11L3 6h10z\'/%3E%3C/svg%3E")', backgroundRepeat: 'no-repeat', backgroundPosition: 'right 10px center' }}>
+                    <option value="all">All Types</option>
+                    <option value="expense">Expenses</option>
+                    <option value="earning">Earnings</option>
+                  </select>
+                  {/* Category filter */}
+                  <select value={filterCategory} onChange={e => setFilterCategory(e.target.value)}
+                    className="px-3 py-2.5 rounded-xl border border-white/[0.05] bg-white/[0.02] text-xs text-white/60 focus:bg-white/[0.04] transition-all appearance-none cursor-pointer min-w-[130px]"
+                    style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'10\' height=\'10\' fill=\'%23666\' viewBox=\'0 0 16 16\'%3E%3Cpath d=\'M8 11L3 6h10z\'/%3E%3C/svg%3E")', backgroundRepeat: 'no-repeat', backgroundPosition: 'right 10px center' }}>
+                    <option value="all">All Categories</option>
+                    {allCats.map(c => <option key={c.id + c.type} value={c.id}>{c.label}</option>)}
+                  </select>
+                  {/* Sort */}
+                  <select value={sortBy} onChange={e => setSortBy(e.target.value)}
+                    className="px-3 py-2.5 rounded-xl border border-white/[0.05] bg-white/[0.02] text-xs text-white/60 focus:bg-white/[0.04] transition-all appearance-none cursor-pointer min-w-[120px]"
+                    style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'10\' height=\'10\' fill=\'%23666\' viewBox=\'0 0 16 16\'%3E%3Cpath d=\'M8 11L3 6h10z\'/%3E%3C/svg%3E")', backgroundRepeat: 'no-repeat', backgroundPosition: 'right 10px center' }}>
+                    <option value="date-desc">Newest</option>
+                    <option value="date-asc">Oldest</option>
+                    <option value="amount-desc">Highest</option>
+                    <option value="amount-asc">Lowest</option>
+                  </select>
+                </div>
+
+                {(filterType !== 'all' || filterCategory !== 'all' || searchQuery.trim()) && (
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-[10px] text-white/20">{filtered.length} result{filtered.length !== 1 ? 's' : ''}</span>
+                    <button onClick={() => { setFilterType('all'); setFilterCategory('all'); setSearchQuery(''); }}
+                      className="text-[10px] text-emerald-400/70 hover:text-emerald-400 transition-colors">Clear filters</button>
+                  </div>
+                )}
+
+                {/* List */}
+                <div className="rounded-2xl border border-white/[0.03] overflow-hidden" style={{ background: '#0e0e10' }}>
+                  {filtered.length === 0 ? (
+                    <EmptyState onAdd={openAdd} />
+                  ) : (
+                    <div className="divide-y divide-white/[0.03]">
+                      {grouped.map(([date, items]) => (
+                        <div key={date}>
+                          <div className="px-4 py-2 flex items-center justify-between" style={{ background: 'rgba(255,255,255,0.01)' }}>
+                            <span className="text-[10px] font-semibold text-white/25 uppercase tracking-wider">
+                              {date === getToday() ? 'Today' : date === new Date(Date.now() - 86400000).toISOString().split('T')[0] ? 'Yesterday' : formatDate(date)}
+                            </span>
+                            <div className="flex items-center gap-3">
+                              {(() => {
+                                const dayEarnings = items.filter(i => i.type === 'earning').reduce((s, i) => s + i.amount, 0);
+                                const dayExpenses = items.filter(i => i.type === 'expense').reduce((s, i) => s + i.amount, 0);
+                                return (
+                                  <>
+                                    {dayEarnings > 0 && <span className="text-[10px] font-mono text-emerald-400/50">+{formatCurrency(dayEarnings)}</span>}
+                                    {dayExpenses > 0 && <span className="text-[10px] font-mono text-rose-400/50">-{formatCurrency(dayExpenses)}</span>}
+                                  </>
+                                );
+                              })()}
+                            </div>
+                          </div>
+                          {items.map((entry, i) => (
+                            <EntryRow key={entry.id} entry={entry} index={i} onEdit={openEdit} onDelete={setDeleteTarget} />
+                          ))}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Right: Sidebar */}
+              <div className="space-y-4">
+                <CategoryBreakdown expenses={expenses} earnings={earnings} activeTab={catTab} setActiveTab={setCatTab} />
+
+                {/* Quick Stats */}
+                <div className="rounded-2xl border border-white/[0.05] p-4" style={{ background: 'linear-gradient(135deg, #141416 0%, #111113 100%)' }}>
+                  <h3 className="text-[10px] font-semibold text-white/30 uppercase tracking-wider mb-3">Quick Stats</h3>
+                  <div className="space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] text-white/25">Top Expense Cat</span>
+                      {(() => {
+                        const m = {}; expenses.forEach(e => { m[e.category] = (m[e.category] || 0) + e.amount; });
+                        const top = Object.entries(m).sort((a, b) => b[1] - a[1])[0];
+                        if (!top) return <span className="text-[11px] text-white/15">—</span>;
+                        const c = getCat(top[0], 'expense');
+                        return <div className="flex items-center gap-1.5"><i className={`fa-solid ${c.icon} text-[9px]`} style={{ color: c.color }}></i><span className="text-[11px] text-white/60">{c.label.split('&')[0].trim()}</span></div>;
+                      })()}
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] text-white/25">Top Income Cat</span>
+                      {(() => {
+                        const m = {}; earnings.forEach(e => { m[e.category] = (m[e.category] || 0) + e.amount; });
+                        const top = Object.entries(m).sort((a, b) => b[1] - a[1])[0];
+                        if (!top) return <span className="text-[11px] text-white/15">—</span>;
+                        const c = getCat(top[0], 'earning');
+                        return <div className="flex items-center gap-1.5"><i className={`fa-solid ${c.icon} text-[9px]`} style={{ color: c.color }}></i><span className="text-[11px] text-white/60">{c.label}</span></div>;
+                      })()}
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] text-white/25">Biggest Entry</span>
+                      <span className="text-[11px] text-white/60 font-mono">{entries.length > 0 ? formatCurrency(Math.max(...entries.map(e => e.amount))) : '—'}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] text-white/25">Savings Rate</span>
+                      <span className="text-[11px] font-mono" style={{ color: totalEarnings > 0 ? ((balance / totalEarnings) * 100 >= 0 ? '#34d399' : '#fb7185') : '#6b7280' }}>
+                        {totalEarnings > 0 ? `${((balance / totalEarnings) * 100).toFixed(1)}%` : '—'}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] text-white/25">Active Days</span>
+                      <span className="text-[11px] text-white/60 font-mono">{entries.length > 0 ? new Set(entries.map(e => e.date)).size : 0}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Data */}
+                <div className="rounded-2xl border border-white/[0.05] p-4" style={{ background: 'linear-gradient(135deg, #141416 0%, #111113 100%)' }}>
+                  <h3 className="text-[10px] font-semibold text-white/30 uppercase tracking-wider mb-3">Data</h3>
+                  <div className="flex flex-col gap-1.5">
+                    <button onClick={() => {
+                      const blob = new Blob([JSON.stringify(entries, null, 2)], { type: 'application/json' });
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement('a'); a.href = url; a.download = `expenseflow_${getToday()}.json`; a.click();
+                      URL.revokeObjectURL(url); addToast('Exported as JSON');
+                    }} className="w-full flex items-center gap-2 px-3 py-2 rounded-xl border border-white/[0.04] text-[11px] text-white/40 hover:text-white/60 hover:bg-white/[0.02] transition-all btn-press">
+                      <i className="fa-solid fa-download text-[9px]"></i> Export JSON
+                    </button>
+                    <label className="w-full flex items-center gap-2 px-3 py-2 rounded-xl border border-white/[0.04] text-[11px] text-white/40 hover:text-white/60 hover:bg-white/[0.02] transition-all btn-press cursor-pointer">
+                      <i className="fa-solid fa-upload text-[9px]"></i> Import JSON
+                      <input type="file" accept=".json" className="hidden" onChange={(e) => {
+                        const f = e.target.files[0]; if (!f) return;
+                        const r = new FileReader();
+                        r.onload = (ev) => {
+                          try {
+                            const d = JSON.parse(ev.target.result);
+                            if (Array.isArray(d)) { setEntries(d); addToast(`Imported ${d.length} entries`); }
+                            else addToast('Invalid format', 'error');
+                          } catch { addToast('Parse error', 'error'); }
+                        };
+                        r.readAsText(f); e.target.value = '';
+                      }} />
+                    </label>
+                    <button onClick={() => {
+                      if (!entries.length) { addToast('Nothing to clear', 'warning'); return; }
+                      setDeleteTarget({ id: '__clear_all__', description: `all ${entries.length} entries`, amount: 0, type: 'expense' });
+                    }} className="w-full flex items-center gap-2 px-3 py-2 rounded-xl border border-rose-500/8 text-[11px] text-rose-400/50 hover:text-rose-400 hover:bg-rose-500/5 transition-all btn-press">
+                      <i className="fa-solid fa-trash text-[9px]"></i> Clear All Data
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </main>
+
+          <footer className="border-t border-white/[0.03] mt-auto">
+            <div className="max-w-6xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
+              <span className="text-[10px] text-white/10">ExpenseFlow — Stored locally on your device</span>
+              <span className="text-[10px] text-white/10 font-mono">{entries.length} records</span>
+            </div>
+          </footer>
+
+          {modalOpen && <ExpenseModal entry={editingEntry} onSave={handleSave} onClose={closeModal} />}
+          {deleteTarget && (
+            deleteTarget.id === '__clear_all__'
+              ? <DeleteConfirm entry={deleteTarget} onConfirm={() => { setEntries([]); setDeleteTarget(null); addToast('All data cleared', 'warning'); }} onCancel={() => setDeleteTarget(null)} />
+              : <DeleteConfirm entry={deleteTarget} onConfirm={() => handleDelete(deleteTarget.id)} onCancel={() => setDeleteTarget(null)} />
+          )}
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>
